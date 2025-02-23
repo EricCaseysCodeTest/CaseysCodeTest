@@ -10,8 +10,8 @@ import 'package:json_placeholder_app/models/post.dart';
 import 'api_service_test.mocks.dart';
 
 void main() {
-  late ApiService apiService;
   late MockClient mockClient;
+  late ApiService apiService;
 
   setUp(() {
     mockClient = MockClient();
@@ -54,39 +54,57 @@ void main() {
     });
 
     test('createPost returns created post', () async {
-      final post = Post(userId: 1, title: 'Test', body: 'Body');
-      final response = {'id': 1, 'userId': 1, 'title': 'Test', 'body': 'Body'};
+      final post = Post(title: 'Test', body: 'Body', userId: 1);
 
       when(mockClient.post(
         Uri.parse('${ApiService.baseUrl}/posts'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(post.toJson()),
-      )).thenAnswer((_) async => http.Response(json.encode(response), 201));
+        headers: {'Content-type': 'application/json; charset=UTF-8'},
+        body: json.encode({
+          'title': post.title,
+          'body': post.body,
+          'userId': post.userId,
+        }),
+      )).thenAnswer((_) async => http.Response(
+            json.encode({
+              'id': 101,
+              'title': 'Test',
+              'body': 'Body',
+              'userId': 1,
+            }),
+            201,
+          ));
 
-      final createdPost = await apiService.createPost(post);
-
-      expect(createdPost.id, equals(1));
-      expect(createdPost.title, equals('Test'));
+      final result = await apiService.createPost(post);
+      expect(result.title, 'Test');
+      expect(result.body, 'Body');
+      expect(result.id, 101);
     });
 
     test('updatePost returns updated post', () async {
-      final post = Post(id: 1, userId: 1, title: 'Updated', body: 'Body');
-      final response = {
-        'id': 1,
-        'userId': 1,
-        'title': 'Updated',
-        'body': 'Body'
-      };
+      final post = Post(id: 1, title: 'Updated', body: 'Body', userId: 1);
 
       when(mockClient.put(
         Uri.parse('${ApiService.baseUrl}/posts/1'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(post.toJson()),
-      )).thenAnswer((_) async => http.Response(json.encode(response), 200));
+        headers: {'Content-type': 'application/json; charset=UTF-8'},
+        body: json.encode({
+          'id': post.id,
+          'title': post.title,
+          'body': post.body,
+          'userId': post.userId,
+        }),
+      )).thenAnswer((_) async => http.Response(
+            json.encode({
+              'id': 1,
+              'title': 'Updated',
+              'body': 'Body',
+              'userId': 1,
+            }),
+            200,
+          ));
 
-      final updatedPost = await apiService.updatePost(post);
-
-      expect(updatedPost.title, equals('Updated'));
+      final result = await apiService.updatePost(post);
+      expect(result.title, 'Updated');
+      expect(result.id, 1);
     });
 
     test('throws exception on error response', () {

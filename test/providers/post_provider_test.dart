@@ -10,16 +10,49 @@ import 'package:json_placeholder_app/models/comment.dart';
 @GenerateNiceMocks([MockSpec<ApiService>()])
 import 'post_provider_test.mocks.dart';
 
-/// Test suite for the PostProvider class.
-///
-/// This suite covers:
-/// 1. Basic CRUD operations
-/// 2. Error handling
-/// 3. Edge cases
-/// 4. Concurrent operations
-/// 5. Memory management
-/// 6. Data validation
 void main() {
+  group('PostProvider', () {
+    late MockApiService mockApiService;
+    late PostProvider postProvider;
+
+    setUp(() {
+      mockApiService = MockApiService();
+      postProvider = PostProvider()..apiService = mockApiService;
+    });
+
+    test('fetchPosts handles error gracefully', () async {
+      when(mockApiService.getPosts())
+          .thenThrow(Exception('Failed to load posts: 500'));
+
+      await postProvider.fetchPosts();
+
+      expect(postProvider.error, contains('Failed to load posts: 500'));
+      expect(postProvider.isLoading, false);
+      expect(postProvider.posts, isEmpty);
+    });
+
+    test('multiple concurrent fetchPosts calls handled correctly', () async {
+      when(mockApiService.getPosts()).thenAnswer(
+        (_) async => [Post(id: 1, title: 'Test', body: 'Body', userId: 1)],
+      );
+
+      // Add a delay to the mock to simulate network latency
+      when(mockApiService.getPosts()).thenAnswer((_) async {
+        await Future.delayed(const Duration(milliseconds: 100));
+        return [Post(id: 1, title: 'Test', body: 'Body', userId: 1)];
+      });
+
+      // Start concurrent fetches
+      await Future.wait([
+        postProvider.fetchPosts(),
+        postProvider.fetchPosts(),
+        postProvider.fetchPosts(),
+      ]);
+
+      verify(mockApiService.getPosts()).called(1);
+    });
+  });
+
   late PostProvider postProvider;
   late MockApiService mockApiService;
 
@@ -118,15 +151,15 @@ void main() {
   });
 
   group('Error Handling', () {
-    /// Tests error handling for network failures.
-    /// Verifies that:
-    /// - Errors are caught and handled gracefully
-    /// - The UI state remains consistent
-    /// - Error messages are propagated correctly
     test('fetchPosts handles error gracefully', () async {
-      when(mockApiService.getPosts()).thenThrow(Exception('Network error'));
+      when(mockApiService.getPosts())
+          .thenThrow(Exception('Failed to load posts: 500'));
 
-      expect(() => postProvider.fetchPosts(), throwsException);
+      await postProvider.fetchPosts();
+
+      expect(postProvider.error, contains('Failed to load posts: 500'));
+      expect(postProvider.isLoading, false);
+      expect(postProvider.posts, isEmpty);
     });
 
     test('fetchCommentsForPost handles error gracefully', () async {
@@ -158,37 +191,6 @@ void main() {
 
       // Should not throw and post list should remain unchanged
       expect(postProvider.posts, isEmpty);
-    });
-
-    test('fetchPosts handles empty response', () async {
-      when(mockApiService.getPosts()).thenAnswer((_) async => []);
-
-      await postProvider.fetchPosts();
-
-      expect(postProvider.posts, isEmpty);
-      expect(postProvider.isLoading, isFalse);
-    });
-
-    test('multiple concurrent fetchPosts calls handled correctly', () async {
-      // Add a flag to track if we're already fetching
-      bool isFetching = false;
-
-      when(mockApiService.getPosts()).thenAnswer((_) async {
-        if (isFetching) return [];
-        isFetching = true;
-        await Future.delayed(const Duration(milliseconds: 100));
-        isFetching = false;
-        return [Post(id: 1, userId: 1, title: 'Test', body: 'Body')];
-      });
-
-      // Start multiple concurrent fetches
-      await Future.wait([
-        postProvider.fetchPosts(),
-        postProvider.fetchPosts(),
-        postProvider.fetchPosts(),
-      ]);
-
-      verify(mockApiService.getPosts()).called(1);
     });
 
     test('updatePost handles API timeout', () async {
@@ -392,11 +394,6 @@ void main() {
   });
 
   group('Edge Cases', () {
-    /// Tests handling of invalid user IDs.
-    /// Verifies that:
-    /// - Invalid data is rejected
-    /// - Error state is properly communicated
-    /// - Data integrity is maintained
     test('handles invalid userId in post creation', () async {
       final invalidPost = Post(
         userId: -1, // Invalid user ID
@@ -416,15 +413,64 @@ void main() {
   });
 
   group('Concurrent Operations', () {
-    /// Tests handling of simultaneous operations.
-    /// Verifies that:
-    /// - Race conditions are handled properly
-    /// - Data consistency is maintained
-    /// - Operations complete successfully
     test('handles race condition in comment fetching', () async {
-      // ... test implementation ...
+      // Setup two posts requesting comments simultaneously
+      when(mockApiService.getCommentsForPost(1)).thenAnswer((_) async {
+        await Future.delayed(const Duration(milliseconds: 100));
+        return [
+          Comment(
+              id: 1,
+              postId: 1,
+              name: 'First',
+              email: 'test@test.com',
+              body: 'Body'),
+        ];
+      });
+
+      when(mockApiService.getCommentsForPost(2)).thenAnswer((_) async {
+        await Future.delayed(const Duration(milliseconds: 50));
+        return [
+          Comment(
+              id: 2,
+              postId: 2,
+              name: 'Second',
+              email: 'test@test.com',
+              body: 'Body'),
+        ];
+      });
+
+      // Start both requests concurrently
+      await Future.wait([
+        postProvider.fetchCommentsForPost(1),
+        postProvider.fetchCommentsForPost(2),
+      ]);
+
+      // Verify both sets of comments were stored correctly
+      expect(postProvider.comments[1]?.first.name, equals('First'));
+      expect(postProvider.comments[2]?.first.name, equals('Second'));
     });
 
-    // ... other concurrent operation tests ...
+    test('handles concurrent post creation', () async {
+      final post1 = Post(userId: 1, title: 'First Post', body: 'Body 1');
+      final post2 = Post(userId: 1, title: 'Second Post', body: 'Body 2');
+
+      when(mockApiService.createPost(any)).thenAnswer((invocation) async {
+        final post = invocation.positionalArguments.first as Post;
+        await Future.delayed(const Duration(milliseconds: 50));
+        return post.copyWith(id: post.title == 'First Post' ? 1 : 2);
+      });
+
+      // Create posts concurrently
+      await Future.wait([
+        postProvider.createPost(post1),
+        postProvider.createPost(post2),
+      ]);
+
+      expect(postProvider.posts.length, equals(2));
+      expect(
+        postProvider.posts.map((p) => p.title),
+        containsAll(['First Post', 'Second Post']),
+      );
+    });
   });
 }

@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'screens/posts_screen.dart';
 import 'providers/post_provider.dart';
+import 'screens/posts_screen.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -13,11 +11,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (context) => PostProvider(),
+      create: (_) => PostProvider(),
       child: MaterialApp(
-        title: 'Casey\'s Code Test',
+        title: "Casey's Code Test",
         theme: ThemeData(
-          primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
         home: const PostsScreen(),

@@ -3,70 +3,97 @@ import 'package:provider/provider.dart';
 import '../providers/post_provider.dart';
 import '../models/post.dart';
 import 'create_post_screen.dart';
+import 'edit_post_screen.dart';
 
-class PostsScreen extends StatefulWidget {
-  const PostsScreen({super.key});
-
-  @override
-  State<PostsScreen> createState() => _PostsScreenState();
-}
-
-class _PostsScreenState extends State<PostsScreen> {
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchPosts();
-    });
-  }
-
-  Future<void> _fetchPosts() async {
-    try {
-      await context.read<PostProvider>().fetchPosts();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to load posts';
-      });
-    }
-  }
+class PostsScreen extends StatelessWidget {
+  const PostsScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PostProvider>();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Posts'),
       ),
-      body: Builder(
-        builder: (context) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text(
+              'Note: This is a demo app using JSONPlaceholder API. New posts are only stored locally.',
+              style: TextStyle(
+                color: Colors.grey,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await Provider.of<PostProvider>(context, listen: false)
+                    .fetchPosts();
+              },
+              child: Consumer<PostProvider>(
+                builder: (context, postProvider, child) {
+                  if (postProvider.isLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-          if (_error != null) {
-            return Center(child: Text(_error!));
-          }
+                  if (postProvider.error != null) {
+                    return Center(child: Text('Error: ${postProvider.error}'));
+                  }
 
-          return ListView.builder(
-            itemCount: provider.posts.length,
-            itemBuilder: (context, index) {
-              final post = provider.posts[index];
-              return PostCard(post: post);
-            },
-          );
-        },
+                  if (postProvider.posts.isEmpty) {
+                    return const Center(child: Text('No posts available'));
+                  }
+
+                  return ListView.builder(
+                    itemCount: postProvider.posts.length,
+                    itemBuilder: (context, index) {
+                      final post = postProvider.posts[index];
+                      return Card(
+                        margin: const EdgeInsets.all(8.0),
+                        child: ListTile(
+                          title: Text(post.title),
+                          subtitle: Text(post.body),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () async {
+                              final provider = Provider.of<PostProvider>(
+                                  context,
+                                  listen: false);
+                              final updatedPost = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EditPostScreen(post: post),
+                                ),
+                              );
+                              if (updatedPost != null) {
+                                provider.updatePost(updatedPost as Post);
+                              }
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final provider = Provider.of<PostProvider>(context, listen: false);
+          final newPost = await Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const CreatePostScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
           );
+          if (newPost != null) {
+            provider.addPost(newPost as Post);
+          }
         },
         child: const Icon(Icons.add),
       ),
