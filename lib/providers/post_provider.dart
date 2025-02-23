@@ -9,7 +9,7 @@ class PostProvider extends ChangeNotifier {
   final Map<int, List<Comment>> _comments = {};
   bool _isLoading = false;
   String? _error;
-  // Add this to track locally created posts
+  // Keep local posts separate from API posts since JSONPlaceholder doesn't persist changes
   final List<Post> _localPosts = [];
   bool _isFetching = false; // Add this flag
 
@@ -103,7 +103,7 @@ class PostProvider extends ChangeNotifier {
       setLoading(true);
       setError(null);
       final newPost = await _apiService.createPost(post);
-      // Add to local posts instead of regular posts
+      // Add to local posts instead of relying on API persistence
       _localPosts.insert(0, newPost);
       _posts.insert(0, newPost);
       notifyListeners();
